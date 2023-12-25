@@ -1,0 +1,171 @@
+/*
+ * Copyright (C) 2013 Texas Instruments Incorporated - http://www.ti.com/
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+/dts-v1/;
+
+#include "dra74x.dtsi"
+#include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/clk/ti-dra7-atl.h>
+#include "dra7-densoJ6.dtsi"
+#include "dra7-gen1Display.dtsi"
+
+/ {
+
+	model = "DENSO MID DRA745";
+	compatible = "denso,dra74xmid", "ti,dra742", "ti,dra74", "ti,dra7";
+
+	memory {
+		device_type = "memory";
+		reg = <0x0 0x80000000 0x0 0x7F000000>; /* 2Gbyte = 2048 MB -16MB for alignment calcs */
+	};
+
+	vmmcwl_fixed: fixedregulator-mmcwl {
+		compatible = "regulator-fixed";
+		regulator-name = "vmmcwl_fixed";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		gpio = <&gpio4 7 0>;	/* gpio4_7 Denso WiFi Enabled */
+		startup-delay-us = <70000>;
+		enable-active-high;
+	};
+
+	aliases {
+		serial11 = &duart1;
+		serial12 = &duart2;
+	};
+
+	gpio_keys_polled {
+		compatible = "gpio-keys-polled";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		poll-interval = <100>;
+		status = "okay";
+		button-lwc {
+			label = "GPIO LWC";
+			linux,code = <68>; /* KEY_F10 */
+			lwc-gpios = <501 GPIO_ACTIVE_LOW>;
+		};
+	};
+
+	duart1: serial@03000000 {
+		compatible = "ti,tl16c752-uart";
+		reg = <0x0 0x03000000 0x0 0x40>;
+		clock-frequency = <14745600>;
+		/* irq setup */
+		interrupt-controller;
+		interrupt-parent = <&gpio6>;
+		interrupts = <8 IRQ_TYPE_EDGE_RISING>;
+		interrupt-names = "duart1 int";
+		#interrupt-cells = <2>;
+		status = "okay";
+	};
+
+	duart2: serial@07000000 {
+		compatible = "ti,tl16c752-uart";
+		reg = <0x0 0x07000000 0x0 0x40>;
+		clock-frequency = <14745600>;
+		/* irq setup */
+		interrupt-controller;
+		interrupt-parent = <&gpio6>;
+		interrupts = <9 IRQ_TYPE_EDGE_RISING>;
+		interrupt-names = "duart2 int";
+		#interrupt-cells = <2>;
+		status = "okay";
+	};
+};
+
+&mmc2 {
+	status = "okay";
+	vmmc-supply = <&evm_3v3_sw>;
+	bus-width = <8>;
+	pinctrl-names = "default", "hs", "hs200";
+	pinctrl-0 = <&mmc2_pins_default>;
+	pinctrl-1 = <&mmc2_pins_hs>;
+	pinctrl-2 = <&mmc2_pins_hs200 &mmc2_iodelay_hs200_conf>;
+	mmc-hs200-1_8v;
+	max-frequency = <192000000>;
+};
+
+&i2c1 {
+	camera_adv7180: camera_adv7180 {
+		compatible = "ad,adv7180";
+		reg = <0x21>;
+		/*gpios = <&gpio5 25 0>;   only one if IRQ is being used */
+		/* interrupts = <27 0x8>; Invalid value */
+
+		port {
+			adv7180: endpoint@0 {
+				// No props incase of BT656
+				/* hsync-active = <0>; This signal is embedded */
+				/* vsync-active = <0>; This signal is embedded */
+				/* bus-width = <8>; John thinks this is not needed */
+			};
+		};
+	};
+};
+
+&voltdm_mpu {
+	vdd-supply = <&smps12_reg>;
+};
+
+&qspi {
+	status = "okay";
+
+	spi-max-frequency = <48000000>;
+	m25p80@0 {
+		compatible = "s25fl129p1";
+		spi-max-frequency = <48000000>;
+		reg = <0>;
+		spi-tx-bus-width = <1>;
+		spi-rx-bus-width = <4>;
+		spi-cpol;
+		spi-cpha;
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		/* MTD partition table.
+		 * The ROM checks the first four physical blocks
+		 * for a valid file to boot and the flash here is
+		 * 64KiB block size.
+		 */
+		partition@0 {
+			label = "QSPI.SPL";
+			reg = <0x00000000 0x000020000>;
+		};
+		partition@1 {
+			label = "QSPI.u-boot";
+			reg = <0x00080000 0x00080000>;
+		};
+		partition@2 {
+			label = "QSPI.denso-primary";
+			reg = <0x00fd0000 0x00010000>;
+		};
+		partition@3 {
+			label = "QSPI.denso-secondary";
+			reg = <0x00fe0000 0x00010000>;
+		};
+		partition@4 {
+			label = "QSPI.denso-readonly";
+			reg = <0x00ff0000 0x00010000>;
+		};
+		partition@5 {
+			label = "QSPI.denso-bootflags";
+			reg = <0x00fc0000 0x00010000>;
+		};
+		partition@6 {
+			label = "QSPI.denso-otp";
+			/* Secure Silicon Sector
+			 *   Document: S25FL256S.pdf
+			 *   Table 8.7
+			 *   Page: 58
+			 *	 Valid Sector: 0x00 - 0x3FF
+			 */
+			reg = <0x00000000 0x00010000>;
+		};
+	};
+};
